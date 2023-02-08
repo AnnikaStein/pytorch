@@ -237,16 +237,9 @@ function(_OPENMP_GET_FLAGS LANG FLAG_MODE OPENMP_FLAG_VAR OPENMP_LIB_NAMES_VAR)
     # Rather than blindly picking one, we pick what ever `FindMKL.cmake` choses
     # to avoid conflicts.
     #
-    # Crucially, we only do so for non-GNU compilers. For GNU ones,
     # `FindMKL.cmake` calls `FindOpenMP.cmake` when trying to find `gomp` and
-    # thus will cause infinite recursion if this is not taken care of. Moreover,
-    # for them, since the compiler provides the OpenMP library, it is most
-    # likely that only one viable gomp library can be found in search path by
-    # `FindOpenMP.cmake`, so the chance of having conflicts is slow.
-    #
-    # TODO: refactor to solve this weird dependency where
-    #         - for non-GNU, FindOpenMP.cmake replies on FindMKL.cmake to finish first, but
-    #         - for GNU,     FindMKL.cmake replies on FindOpenMP.cmake to finish first.
+    # thus will cause infinite recursion if this is not taken care of. Therefore,
+    # we record an internal flag to detect repeatedly inclusion.
 
     if(NOT "${CMAKE_${LANG}_COMPILER_ID}" STREQUAL "GNU" AND BLAS STREQUAL "MKL" AND NOT IN_FIND_OMP)
       set(IN_FIND_OMP ON CACHE BOOL "" FORCE)
