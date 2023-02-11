@@ -4742,7 +4742,10 @@ def _in_projection_packed(
                 b_q = b_kv = None
             else:
                 b_q, b_kv = b.split([E, E * 2])
-            return (linear(q, w_q, b_q),) + linear(k, w_kv, b_kv).chunk(2, dim=-1)
+            #breakpoint()
+            #return (linear(q, w_q, b_q),) + linear(k, w_kv, b_kv).chunk(2, dim=-1)
+            intermed_lin_chunked = linear(k, w_kv, b_kv).chunk(2, dim=-1)
+            return [linear(q, w_q, b_q), intermed_lin_chunked[0], intermed_lin_chunked[1]]
     else:
         w_q, w_k, w_v = w.chunk(3)
         if b is None:
@@ -5163,6 +5166,7 @@ def multi_head_attention_forward(
         attn_output_weights = dropout(attn_output_weights, p=dropout_p)
 
     attn_output = torch.bmm(attn_output_weights, v)
+    #attn_output = torch.matmul(attn_output_weights, v)
 
     attn_output = attn_output.transpose(0, 1).contiguous().view(tgt_len * bsz, embed_dim)
     attn_output = linear(attn_output, out_proj_weight, out_proj_bias)
