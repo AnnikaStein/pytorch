@@ -944,8 +944,8 @@ class MultiheadAttention(Module):
     bias_k: Optional[torch.Tensor]
     bias_v: Optional[torch.Tensor]
 
-    def __init__(self, embed_dim, num_heads, dropout=0., bias=True, add_bias_kv=False, add_zero_attn=False,
-                 kdim=None, vdim=None, batch_first=False, device=None, dtype=None) -> None:
+    def __init__(self, embed_dim : int, num_heads : int, dropout : float=0., bias : bool=True, add_bias_kv : bool=False, add_zero_attn : bool=False,
+                 kdim=None, vdim=None, batch_first : bool=False, device=None, dtype=None) -> None:
         factory_kwargs = {'device': device, 'dtype': dtype}
         super(MultiheadAttention, self).__init__()
         self.embed_dim = embed_dim
@@ -1066,43 +1066,67 @@ class MultiheadAttention(Module):
             if _kpm_dtype != torch.bool and not torch.is_floating_point(key_padding_mask):
                 raise AssertionError(
                     "only bool and floating types of key_padding_mask are supported")
-        why_not_fast_path = ''
+        #why_not_fast_path = ''
+        why_not_fast_path_bool = False
         if not is_batched:
-            why_not_fast_path = f"input not batched; expected query.dim() of 3 but got {query.dim()}"
+            # why_not_fast_path = "input not batched; expected query.dim() of 3 but got " + str(query.dim())
+            why_not_fast_path = "input not batched; expected query.dim() of 3 but got "
+            why_not_fast_path_bool = True
         elif query is not key or key is not value:
             # When lifting this restriction, don't forget to either
             # enforce that the dtypes all match or test cases where
             # they don't!
             why_not_fast_path = "non-self attention was used (query, key, and value are not the same Tensor)"
+            why_not_fast_path_bool = True
         elif self.in_proj_bias is not None and query.dtype != self.in_proj_bias.dtype:
-            why_not_fast_path = f"dtypes of query ({query.dtype}) and self.in_proj_bias ({self.in_proj_bias.dtype}) don't match"
+            # why_not_fast_path = f"dtypes of query ({query.dtype}) and self.in_proj_bias ({self.in_proj_bias.dtype}) don't match"
+            #why_not_fast_path = "dtypes of query (" + str(query.dtype) + ") and self.in_proj_bias (" + str(self.in_proj_bias.dtype) + ") don't match"
+            why_not_fast_path = "dtypes of query ( ) and self.in_proj_bias ( ) don't match"
+            why_not_fast_path_bool = True
         elif self.in_proj_weight is not None and query.dtype != self.in_proj_weight.dtype:
             # this case will fail anyway, but at least they'll get a useful error message.
-            why_not_fast_path = f"dtypes of query ({query.dtype}) and self.in_proj_weight ({self.in_proj_weight.dtype}) don't match"
+            # why_not_fast_path = f"dtypes of query ({query.dtype}) and self.in_proj_weight ({self.in_proj_weight.dtype}) don't match"
+            #why_not_fast_path = "dtypes of query (" + str(query.dtype) + ") and self.in_proj_weight (" + str(self.in_proj_weight.dtype) + ") don't match"
+            why_not_fast_path = "dtypes of query ( ) and self.in_proj_weight ( ) don't match"
+            why_not_fast_path_bool = True
         elif self.training:
             why_not_fast_path = "training is enabled"
+            why_not_fast_path_bool = True
         elif not self.batch_first:
             why_not_fast_path = "batch_first was not True"
+            why_not_fast_path_bool = True
         elif self.bias_k is not None:
             why_not_fast_path = "self.bias_k was not None"
+            why_not_fast_path_bool = True
         elif self.bias_v is not None:
             why_not_fast_path = "self.bias_v was not None"
+            why_not_fast_path_bool = True
         elif self.dropout:
-            why_not_fast_path = f"dropout was {self.dropout}, required zero"
+            # why_not_fast_path = f"dropout was {self.dropout}, required zero"
+            #why_not_fast_path = "dropout was  " + str(self.dropout) + ", required zero"
+            why_not_fast_path = "dropout was , required zero"
+            why_not_fast_path_bool = True
         elif self.add_zero_attn:
             why_not_fast_path = "add_zero_attn was enabled"
+            why_not_fast_path_bool = True
         elif not self._qkv_same_embed_dim:
             why_not_fast_path = "_qkv_same_embed_dim was not True"
+            why_not_fast_path_bool = True
         elif attn_mask is not None:
             why_not_fast_path = "attn_mask was not None"
+            why_not_fast_path_bool = True
         elif query.is_nested and key_padding_mask is not None:
             why_not_fast_path = "key_padding_mask is not supported with NestedTensor input"
+            why_not_fast_path_bool = True
         elif self.num_heads % 2 == 1:
             why_not_fast_path = "num_heads is odd"
+            why_not_fast_path_bool = True
         elif torch.is_autocast_enabled():
             why_not_fast_path = "autocast is enabled"
+            why_not_fast_path_bool = True
 
-        if not why_not_fast_path:
+        #if not why_not_fast_path:
+        if why_not_fast_path_bool == False:
             tensor_args = (
                 query,
                 key,
@@ -1116,12 +1140,16 @@ class MultiheadAttention(Module):
             # generator expressions.
             if torch.overrides.has_torch_function(tensor_args):
                 why_not_fast_path = "some Tensor argument has_torch_function"
+                why_not_fast_path_bool = True
             elif not all([(x.is_cuda or 'cpu' in str(x.device)) for x in tensor_args]):
                 why_not_fast_path = "some Tensor argument is neither CUDA nor CPU"
+                why_not_fast_path_bool = True
             elif torch.is_grad_enabled() and any([x.requires_grad for x in tensor_args]):
                 why_not_fast_path = ("grad is enabled and at least one of query or the "
                                      "input/output projection weights or biases requires_grad")
-            if not why_not_fast_path:
+                why_not_fast_path_bool = True
+            #if not why_not_fast_path:
+            if why_not_fast_path_bool == False:
                 return torch._native_multi_head_attention(
                     query,
                     key,
@@ -1138,8 +1166,11 @@ class MultiheadAttention(Module):
                     1 if key_padding_mask is not None else 0 if attn_mask is not None else None)
 
         any_nested = query.is_nested or key.is_nested or value.is_nested
-        assert not any_nested, ("MultiheadAttention does not support NestedTensor outside of its fast path. " +
-                                f"The fast path was not hit because {why_not_fast_path}")
+        #assert not any_nested, ("MultiheadAttention does not support NestedTensor outside of its fast path. " +
+        #                        f"The fast path was not hit because {why_not_fast_path}")
+        #assert not any_nested, ("MultiheadAttention does not support NestedTensor outside of its fast path. " +
+        #                        "The fast path was not hit because " + str(why_not_fast_path) )
+        assert not any_nested, ("MultiheadAttention does not support NestedTensor outside of its fast path. The fast path was not hit because ")
 
         if self.batch_first and is_batched:
             # make sure that the transpose op does not affect the "is" property
@@ -1151,7 +1182,7 @@ class MultiheadAttention(Module):
                     value = key
             else:
                 query, key, value = [x.transpose(1, 0) for x in (query, key, value)]
-
+        #breakpoint()
         if not self._qkv_same_embed_dim:
             attn_output, attn_output_weights = F.multi_head_attention_forward(
                 query, key, value, self.embed_dim, self.num_heads,
